@@ -1,81 +1,106 @@
-#include <iostream>
-#include <string>
+#include "raylib.h"
 #include <vector>
+#include <string>
 #include <ctime>
 #include <cstdlib>
 
-using namespace std;
-
-// Using a struct to organize Player data
 struct Player {
-    int health = 100;
-    int maxHealth = 100;
-    int exp = 0;
-    int level = 1;
-    int x = 0;
-    int y = 0;
+    int x = 0, y = 0;
+    int health = 100, maxHealth = 100;
+    int exp = 0, level = 1;
 };
+
+// Game States
+enum GameState { EXPLORING, BATTLE, WON, LOST };
 
 int main() {
     srand(static_cast<unsigned int>(time(0)));
-    
-    Player p; // Create our player object
-    vector<string> inventory;
+    InitWindow(600, 700, "C++ Dungeon Crawler - Boss Edition"); // Taller for UI
+    SetTargetFPS(60);
+
+    Player p;
+    GameState currentState = EXPLORING;
     bool hasSword = false;
-    bool gameRunning = true;
+    int bossHP = 50;
+    char battleMsg[50] = "A Boss appears! Press Space to Attack!";
 
-    cout << "Welcome to the Final Version of Dungeon Crawler!" << endl;
+    while (!WindowShouldClose()) {
+        // --- 1. UPDATE LOGIC ---
+        if (currentState == EXPLORING) {
+            bool moved = false;
+            if (IsKeyPressed(KEY_W) && p.y > 0) { p.y--; moved = true; }
+            if (IsKeyPressed(KEY_S) && p.y < 2) { p.y++; moved = true; }
+            if (IsKeyPressed(KEY_A) && p.x > 0) { p.x--; moved = true; }
+            if (IsKeyPressed(KEY_D) && p.x < 2) { p.x++; moved = true; }
 
-    while (gameRunning && p.health > 0) {
-        cout << "\n[LVL: " << p.level << " | XP: " << p.exp << "/50]" << endl;
-        cout << "HP: " << p.health << "/" << p.maxHealth << " | Pos: (" << p.x << ", " << p.y << ")" << endl;
-        
-        cout << "Move (w/a/s/d): ";
-        char move;
-        cin >> move;
+            if (moved) {
+                p.exp += 10;
+                // Random Trap (10% chance)
+                if (GetRandomValue(0, 100) < 10) {
+                    p.health -= 10;
+                }
+            }
 
-        bool moved = false;
-        if (move == 'w' && p.y < 2) { p.y++; moved = true; }
-        else if (move == 's' && p.y > 0) { p.y--; moved = true; }
-        else if (move == 'a' && p.x > 0) { p.x--; moved = true; }
-        else if (move == 'd' && p.x < 2) { p.x++; moved = true; }
-
-        if (moved) {
-            p.exp += 10;
+            // Level Up Check
             if (p.exp >= 50) {
-                p.level++;
-                p.exp = 0;
-                p.maxHealth += 20;
-                p.health = p.maxHealth;
-                cout << ">>> LEVEL UP! Now Level " << p.level << "!" << endl;
+                p.level++; p.exp = 0; p.maxHealth += 20; p.health = p.maxHealth;
             }
-        }
 
-        if (p.x == 1 && p.y == 1 && !hasSword) {
-            cout << ">>> Found a Rusty Sword!" << endl;
-            inventory.push_back("Rusty Sword");
-            hasSword = true;
-        }
+            // Trigger Boss Battle at (2, 2)
+            if (p.x == 2 && p.y == 2) currentState = BATTLE;
+            if (p.x == 1 && p.y == 1) hasSword = true;
+            if (p.health <= 0) currentState = LOST;
 
-        if (p.x == 2 && p.y == 2) {
-            int bossHP = 50;
-            cout << "\n!!! BOSS BATTLE !!!" << endl;
-            while (bossHP > 0 && p.health > 0) {
-                int dmg = hasSword ? (rand() % 15 + 10) : (rand() % 10 + 5);
+        } else if (currentState == BATTLE) {
+            if (IsKeyPressed(KEY_SPACE)) {
+                // Player Attacks
+                int dmg = hasSword ? GetRandomValue(15, 25) : GetRandomValue(5, 15);
                 bossHP -= dmg;
-                if (bossHP > 0) p.health -= (rand() % 12 + 5);
-            }
-            if (p.health > 0) {
-                cout << "VICTORY! You conquered the dungeon." << endl;
-                gameRunning = false;
+                
+                // Boss Attacks Back
+                if (bossHP > 0) p.health -= GetRandomValue(5, 12);
+                
+                if (bossHP <= 0) currentState = WON;
+                if (p.health <= 0) currentState = LOST;
             }
         }
-    }
 
-    // Final Stats Display
-    cout << "\n--- FINAL SCORECARD ---" << endl;
-    cout << "Final Level: " << p.level << endl;
-    cout << "Items Found: " << inventory.size() << endl;
-    
+        // --- 2. DRAWING LOGIC ---
+        BeginDrawing();
+        ClearBackground(RAYWHITE);
+
+        if (currentState == EXPLORING) {
+            // Draw Grid
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) 
+                    DrawRectangleLines(i * 200, j * 200, 200, 200, LIGHTGRAY);
+            }
+            if (!hasSword) DrawCircle(300, 300, 20, GOLD); // Sword at (1,1)
+            DrawRectangle(410, 410, 180, 180, GREEN); // Exit
+            DrawRectangle(p.x * 200 + 50, p.y * 200 + 50, 100, 100, BLUE); // Player
+        } 
+        else if (currentState == BATTLE) {
+            DrawRectangle(0, 0, 600, 600, MAROON);
+            DrawText("BOSS BATTLE", 180, 100, 40, WHITE);
+            DrawText(TextFormat("Boss HP: %i", bossHP), 230, 200, 30, YELLOW);
+            DrawText(battleMsg, 120, 400, 20, WHITE);
+        }
+        else if (currentState == WON) {
+            DrawText("VICTORY! YOU ESCAPED!", 100, 300, 30, GREEN);
+        }
+        else if (currentState == LOST) {
+            DrawText("GAME OVER - YOU DIED", 120, 300, 30, RED);
+        }
+
+        // Stats UI Area (Bottom)
+        DrawRectangle(0, 600, 600, 100, BLACK);
+        DrawText(TextFormat("HP: %i/%i", p.health, p.maxHealth), 20, 620, 20, RED);
+        DrawText(TextFormat("LVL: %i", p.level), 200, 620, 20, SKYBLUE);
+        DrawText(TextFormat("XP: %i/50", p.exp), 350, 620, 20, LIME);
+        if (hasSword) DrawText("SWORD EQUIPPED", 20, 660, 20, ORANGE);
+
+        EndDrawing();
+    }
+    CloseWindow();
     return 0;
 }
